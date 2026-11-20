@@ -138,6 +138,46 @@ class ParserTest {
         }
     }
 
+    @Nested
+    inner class FieldTypes {
+
+        @ParameterizedTest
+        @ValueSource(
+            strings = [
+                """["2","abc","Heartbeat",{}]""",
+                """[2.5,"abc","Heartbeat",{}]""",
+                """[true,"abc","Heartbeat",{}]""",
+            ],
+        )
+        fun `MessageTypeId must be an integer`(raw: String) {
+            val ex = assertFailsWith<OcppParseException> { parse(raw) }
+
+            assertEquals("abc", ex.messageId)
+        }
+
+        @ParameterizedTest
+        @ValueSource(
+            strings = [
+                """[2,"abc",42,{}]""",
+                """[2,"abc","Heartbeat",[]]""",
+                """[2,"abc","Heartbeat","{}"]""",
+                """[3,"abc",null]""",
+                """[4,"abc","GenericError","desc","details"]""",
+                """[4,"abc","NoSuchCode","desc",{}]""",
+            ],
+        )
+        fun `wrongly typed fields carry the id`(raw: String) {
+            val ex = assertFailsWith<OcppParseException> { parse(raw) }
+
+            assertEquals("abc", ex.messageId)
+        }
+
+        @Test
+        fun `trailing garbage after the array is rejected`() {
+            assertFailsWith<OcppParseException> { parse("""[2,"abc","Heartbeat",{}] trailing""") }
+        }
+    }
+
     @Test
     fun `id longer than 36 characters is rejected`() {
         val id = "a".repeat(37)
