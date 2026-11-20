@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ocpplab-postgres
+    environment:
+      POSTGRES_DB: ocpplab
+      POSTGRES_USER: ocpplab
+      POSTGRES_PASSWORD: ocpplab
+    ports:
+      - "5432:5432"
+    volumes:
+      - ocpplab-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ocpplab -d ocpplab"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  ocpplab-data:

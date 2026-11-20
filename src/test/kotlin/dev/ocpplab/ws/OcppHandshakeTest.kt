@@ -1,7 +1,9 @@
 package dev.ocpplab.ws
 
+import dev.ocpplab.TestcontainersConfiguration
 import org.junit.jupiter.api.Test
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.context.annotation.Import
 import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.web.socket.CloseStatus
 import org.springframework.web.socket.WebSocketHttpHeaders
@@ -19,7 +21,8 @@ import kotlin.test.assertTrue
  * depend on the parser implementation.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-class OcppHandshakeTest(@LocalServerPort private val port: Int) {
+@Import(TestcontainersConfiguration::class)
+class OcppHandshakeTest(@param:LocalServerPort private val port: Int) {
 
     private class RecordingHandler : TextWebSocketHandler() {
         val closed = CompletableFuture<CloseStatus>()
