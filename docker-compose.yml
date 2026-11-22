@@ -7,8 +7,8 @@ services:
       POSTGRES_USER: ocpplab
       POSTGRES_PASSWORD: ocpplab
     ports:
-      # Host port 5432 by default; set OCPPLAB_DB_PORT if 5432 is taken (use the same value for the server).
-      - "${OCPPLAB_DB_PORT:-5432}:5432"
+      # Host port 5433 (5432 is often taken by another local Postgres); container port stays 5432.
+      - "5433:5432"
     volumes:
       - ocpplab-data:/var/lib/postgresql/data
     healthcheck:

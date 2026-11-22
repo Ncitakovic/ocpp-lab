@@ -66,19 +66,13 @@ docker-compose.yml             local Postgres 16
 ### 1. Database
 
 ```bash
-docker compose up -d       # Postgres 16 on localhost:5432, db/user/password: ocpplab
+docker compose up -d       # Postgres 16 on localhost:5433, db/user/password: ocpplab
 docker compose down        # stop (data is kept in the ocpplab-data volume)
 docker compose down -v     # stop and delete the data
 ```
 
-If port 5432 is already taken, pick another one and use the same value for the server:
-
-```bash
-OCPPLAB_DB_PORT=5433 docker compose up -d
-OCPPLAB_DB_PORT=5433 ./gradlew bootRun
-```
-
-(PowerShell: `$env:OCPPLAB_DB_PORT=5433` first, then the commands without the prefix.)
+The database uses host port **5433**, not the default 5432, so it does not clash
+with another local Postgres. Inside the container it still listens on 5432.
 
 ### 2. Server
 
