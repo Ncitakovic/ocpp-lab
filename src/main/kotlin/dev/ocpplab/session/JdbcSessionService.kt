@@ -40,6 +40,11 @@ class JdbcSessionService(
     }
 
     override fun stopSession(transactionId: Int, meterStop: Int, stoppedAt: Instant, reason: String): StopOutcome {
-        TODO("Nikola implementira")
+        val updated = sessions.closeIfOpen(transactionId, meterStop, stoppedAt, reason)
+        return when {
+            updated == 1 -> StopOutcome.Closed
+            sessions.existsById(transactionId) -> StopOutcome.AlreadyClosed
+            else -> StopOutcome.UnknownTransaction
+        }
     }
 }
