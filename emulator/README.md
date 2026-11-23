@@ -61,6 +61,3 @@ session only once.
 | `--connector` | `1` | connector id |
 | `--meter-interval` | `1` | seconds between MeterValues |
 | `--duplicate-stop` | off | send StopTransaction twice |
-
-> Until `SessionService.stopSession` is implemented, the server fails on
-> `StopTransaction` and closes the connection, so the session command stops there.

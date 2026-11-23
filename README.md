@@ -114,9 +114,22 @@ Docker must be running: the integration tests start Postgres with Testcontainers
 ./gradlew build            # compile + test + jar
 ```
 
-> **Work in progress:** `SessionServiceTest$StopSession` fails until these are implemented:
-> - `JdbcSessionService.stopSession` (`src/main/kotlin/dev/ocpplab/session/JdbcSessionService.kt`)
-> - `ChargingSessionRepository.closeIfOpen` (`src/main/kotlin/dev/ocpplab/session/Repositories.kt`), as a single conditional UPDATE
->
-> Until then the server also fails on `StopTransaction`. Everything else must pass.
-> To build without running tests, use `./gradlew build -x test`.
+What is covered:
+
+- **Parser**: valid CALL / CALLRESULT / CALLERROR, broken JSON, wrong element counts, wrong field types, id length.
+- **Dispatcher**: every supported action, with a fixed `Clock` and a fake `SessionService`.
+- **Sessions** (real Postgres): open, meter values, close, duplicate and unknown StopTransaction,
+  and two identical StopTransactions at the same moment closing the session exactly once.
+  Closing is a single conditional `UPDATE ... WHERE status = 'OPEN'`, so only one caller can win.
+- **WebSocket**: subprotocol negotiation on a real port.
+
+To build without running tests, use `./gradlew build -x test`.
+
+## Security note
+
+The `ocpplab` username and password in `docker-compose.yml` and `application.properties`
+are for the local development database only. Do not reuse them anywhere else.
+
+## License
+
+[MIT](LICENSE)
