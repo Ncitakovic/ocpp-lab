@@ -102,9 +102,13 @@ stays unpublished until the broker acknowledged it.
   commit means redelivery, and a crash after it means the redelivery is skipped.
 - `UNIQUE (transaction_id)` on `billing_record` is a second safety net. If two
   different event ids ever arrive for the same session, the second one hits the
-  constraint. The listener treats that as "already billed": it logs a warning,
-  records the event id and acknowledges. It is not retried forever, so it cannot
-  block the partition.
+  constraint (`INSERT ... ON CONFLICT (transaction_id) DO NOTHING`). `BillingService`
+  treats that as "already billed": it logs a warning, keeps the event id in
+  `processed_event` and returns `AlreadyProcessed`, and the listener acknowledges.
+  It is not retried forever, so it cannot block the partition.
+- Deduplication is a single `INSERT ... ON CONFLICT DO NOTHING` on `processed_event`,
+  not `exists()` followed by an insert. Two copies of the same event processed at the
+  same moment therefore cannot both bill.
 
 The result is effectively-once billing, without Kafka transactions.
 

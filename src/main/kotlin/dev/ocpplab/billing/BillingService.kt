@@ -1,6 +1,7 @@
 package dev.ocpplab.billing
 
 import dev.ocpplab.events.SessionClosed
+import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -34,6 +35,7 @@ class BillingService(
     private val clock: Clock,
     @param:Value("\${billing.price-per-kwh}") private val pricePerKwh: BigDecimal,
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
 
     /**
      * Bills one closed session. processed_event and billing_record are written in ONE transaction:
@@ -43,21 +45,16 @@ class BillingService(
     fun bill(eventId: UUID, event: SessionClosed): BillingOutcome {
         val now = clock.instant()
 
-        // TODO (b) [user]: idempotency check on processed_event, in this same transaction.
-        //
-        //  - If eventId was already processed: write nothing and return BillingOutcome.AlreadyProcessed.
-        //    The listener still acknowledges the offset, so the redelivered message is skipped.
-        //  - Otherwise: record eventId in processed_event (processed_at = now) and fall through
-        //    to the billing_record insert below.
-        //
-        //  Available: processedEvents.exists(eventId) and processedEvents.insertIfAbsent(eventId, now)
-        //  (returns 1 if inserted, 0 if already there). Think about two deliveries of the same
-        //  event running at the same moment: which version leaves no gap between "check" and "insert"?
-        //
-        //  Test that checks this: BillingIntegrationTest `same event billed twice ...`.
+        // Two deliveries of the same event at the same moment: exists() followed by an insert is
+        // check-then-act, so both could see "not processed" and both would bill. insertIfAbsent is a
+        // single atomic INSERT ... ON CONFLICT DO NOTHING: the second one waits on the first one's
+        // primary-key entry and, once that commits, inserts nothing and returns 0, so exactly one bills.
+        if (processedEvents.insertIfAbsent(eventId, now) == 0) {
+            return BillingOutcome.AlreadyProcessed
+        }
 
         val energyWh = event.meterStop.toLong() - event.meterStart
-        billingRecords.insert(
+        val inserted = billingRecords.insertIfAbsent(
             BillingRecord(
                 transactionId = event.transactionId,
                 eventId = eventId,
@@ -69,10 +66,12 @@ class BillingService(
                 billedAt = now,
             ),
         )
+        if (inserted == 0) {
+            // UNIQUE (transaction_id): this session was already billed by a different event id.
+            // Not an error to retry (it would never succeed): the event stays recorded as processed.
+            log.warn("Transaction {} already billed, event {} recorded as processed", event.transactionId, eventId)
+            return BillingOutcome.AlreadyProcessed
+        }
         return BillingOutcome.Billed
     }
-
-    /** Records eventId as processed without billing (used when the session was already billed). */
-    @Transactional
-    fun markProcessed(eventId: UUID): Boolean = processedEvents.insertIfAbsent(eventId, clock.instant()) == 1
 }

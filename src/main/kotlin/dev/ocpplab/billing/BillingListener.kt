@@ -7,7 +7,6 @@ import dev.ocpplab.events.SESSION_CLOSED
 import dev.ocpplab.events.SessionClosed
 import org.apache.kafka.clients.consumer.ConsumerRecord
 import org.slf4j.LoggerFactory
-import org.springframework.dao.DuplicateKeyException
 import org.springframework.kafka.annotation.KafkaListener
 import org.springframework.kafka.support.Acknowledgment
 import org.springframework.stereotype.Component
@@ -42,19 +41,15 @@ class BillingListener(
             return
         }
 
-        try {
-            when (billing.bill(envelope.eventId, event)) {
-                BillingOutcome.Billed ->
-                    log.info("Transaction {} billed (event {})", event.transactionId, envelope.eventId)
-                BillingOutcome.AlreadyProcessed ->
-                    log.info("Event {} already processed, skipped", envelope.eventId)
-            }
-        } catch (e: DuplicateKeyException) {
-            // billing_record UNIQUE (transaction_id): this session is already billed, by a different
-            // event id. Retrying cannot succeed, so treat it as processed instead of a poison message.
-            log.warn("Transaction {} already billed, event {} recorded as processed", event.transactionId, envelope.eventId)
-            billing.markProcessed(envelope.eventId)
+        // Duplicates (same event id, or a session already billed by another event id) come back as
+        // AlreadyProcessed, not as an exception, so they are acknowledged and never block the partition.
+        when (billing.bill(envelope.eventId, event)) {
+            BillingOutcome.Billed ->
+                log.info("Transaction {} billed (event {})", event.transactionId, envelope.eventId)
+            BillingOutcome.AlreadyProcessed ->
+                log.info("Event {} already processed, skipped", envelope.eventId)
         }
+        // bill() has returned, so its transaction has committed: only now is it safe to commit the offset.
         ack.acknowledge()
     }
 

@@ -45,14 +45,21 @@ class ProcessedEventRepository(private val jdbc: JdbcClient) {
 @Repository
 class BillingRecordRepository(private val jdbc: JdbcClient) {
 
-    /** Throws DuplicateKeyException if this transactionId is already billed (UNIQUE). */
-    fun insert(record: BillingRecord) {
+    /**
+     * @return 1 if inserted, 0 if this transactionId is already billed (UNIQUE).
+     *
+     * ON CONFLICT instead of catching DuplicateKeyException: in Postgres a failed statement aborts
+     * the whole transaction, so after catching the exception the processed_event row written
+     * earlier in the same transaction could not be committed any more.
+     */
+    fun insertIfAbsent(record: BillingRecord): Int =
         jdbc.sql(
             """
             INSERT INTO billing_record
                 (transaction_id, event_id, charge_point_id, id_tag, energy_wh, price_per_kwh, amount, billed_at)
             VALUES
                 (:transactionId, :eventId, :chargePointId, :idTag, :energyWh, :pricePerKwh, :amount, :billedAt)
+            ON CONFLICT (transaction_id) DO NOTHING
             """,
         )
             .param("transactionId", record.transactionId)
@@ -64,7 +71,6 @@ class BillingRecordRepository(private val jdbc: JdbcClient) {
             .param("amount", record.amount)
             .param("billedAt", Timestamp.from(record.billedAt))
             .update()
-    }
 
     fun findByTransactionId(transactionId: Int): List<BillingRecord> =
         jdbc.sql("SELECT * FROM billing_record WHERE transaction_id = :transactionId")

@@ -22,7 +22,7 @@ class KafkaConfig {
     /**
      * Listener errors (e.g. the database is down) are retried every second, forever. The default
      * handler gives up after 10 tries and skips the record, which would lose a bill.
-     * Known-bad input (unreadable JSON, duplicates) is handled in BillingListener and never gets here,
+     * Known-bad input (unreadable JSON, duplicates) is handled in BillingListener and BillingService and never gets here,
      * so it cannot block the partition.
      */
     @Bean
