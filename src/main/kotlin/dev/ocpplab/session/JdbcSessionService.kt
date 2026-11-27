@@ -1,5 +1,6 @@
 package dev.ocpplab.session
 
+import dev.ocpplab.events.SessionClosed
 import dev.ocpplab.events.SessionOpened
 import dev.ocpplab.outbox.Outbox
 import org.slf4j.LoggerFactory
@@ -59,24 +60,33 @@ class JdbcSessionService(
         return true
     }
 
-    // TODO (a) [user]: write the SessionClosed event to the outbox in the SAME transaction as closeIfOpen.
-    //
-    //  1. Put @Transactional on this method (already imported). outbox.append(...) uses
-    //     Propagation.MANDATORY, so without a transaction it throws IllegalTransactionStateException.
-    //  2. Only when updated == 1 (this call closed the session):
-    //       - load the session with sessions.findById(transactionId). Inside the same transaction it
-    //         already shows the new values (status CLOSED, meterStop, stoppedAt, stopReason).
-    //       - call outbox.append(SessionClosed(...)) (dev.ocpplab.events.SessionClosed). Fields:
-    //         transactionId, chargePointId, connectorId, idTag, meterStart, meterStop, startedAt,
-    //         stoppedAt, reason.
-    //  3. AlreadyClosed and UnknownTransaction must NOT write an outbox row.
-    //
-    //  Tests that check this: OutboxKafkaIntegrationTest (closing writes exactly one event,
-    //  concurrent stops write one row, crash before published_at).
+    /**
+     * Closing the session and writing its SessionClosed outbox row are one transaction: both commit,
+     * or neither. Only the call that actually closed the session (updated == 1) writes the event,
+     * so a duplicate or unknown StopTransaction never produces one.
+     */
+    @Transactional
     override fun stopSession(transactionId: Int, meterStop: Int, stoppedAt: Instant, reason: String): StopOutcome {
         val updated = sessions.closeIfOpen(transactionId, meterStop, stoppedAt, reason)
         return when {
-            updated == 1 -> StopOutcome.Closed
+            updated == 1 -> {
+                // Same transaction, so this already sees the row closeIfOpen just updated.
+                val session = sessions.findById(transactionId).orElseThrow()
+                outbox.append(
+                    SessionClosed(
+                        transactionId = transactionId,
+                        chargePointId = session.chargePointId,
+                        connectorId = session.connectorId,
+                        idTag = session.idTag,
+                        meterStart = session.meterStart,
+                        meterStop = meterStop,
+                        startedAt = session.startedAt,
+                        stoppedAt = stoppedAt,
+                        reason = reason,
+                    ),
+                )
+                StopOutcome.Closed
+            }
             sessions.existsById(transactionId) -> StopOutcome.AlreadyClosed
             else -> StopOutcome.UnknownTransaction
         }
